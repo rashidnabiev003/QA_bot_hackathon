@@ -13,6 +13,9 @@ dependencies = [
     "pydantic==2.11.10",
     "sentence-transformers>=5.0.0",
     "transformers>=4.53.1",
+    "torch==2.7.0",
+    "torchaudio>=2.7.0",
+    "torchvision>=0.22.0",
 ]
 
 [dependency-groups]

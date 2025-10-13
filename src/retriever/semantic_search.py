@@ -2,11 +2,14 @@ import json
 import numpy as np
 import faiss
 import torch
+import logging
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from sentence_transformers import SentenceTransformer
 from FlagEmbedding import BGEM3FlagModel
 from src.schemas.pydantic_schemas import BuildConfig
+
+logger = logging.getLogger(__name__)
 
 class SemanticSearch:
     def __init__(self, workdir: str, config: BuildConfig):
@@ -55,6 +58,14 @@ class SemanticSearch:
         self.meta = chunks
         np.save(self.embed_path, vecs)
         self.meta_path.write_text("\n".join([json.dumps(x, ensure_ascii=False) for x in chunks]), encoding="utf-8")
+
+    def load(self) -> None:
+        try:
+            self.index = faiss.read_index(str(self.index_path))
+            self.emb = None
+            return
+        except Exception as e:
+            logging.warning(f"Failed to load FAISS index: {e}")
 
     def retrieve(self, query: str, topn: int = 50, topk: int = 5) -> dict:
         q = self._embed([query])

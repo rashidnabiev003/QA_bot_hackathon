@@ -7,3 +7,9 @@ class BuildConfig(BaseModel):
 	use_fp16_rerank: bool
 	chunk_size: int
 	overlap_size: int
+
+class MetricConfig(BaseModel):
+    bleurt_ckpt: str 
+    sas_model: str 
+    sas_device: str 
+    sas_fp16: bool

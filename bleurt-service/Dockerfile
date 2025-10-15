@@ -11,9 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /srv
 
-COPY requirements.txt ./
 RUN pip install --upgrade pip setuptools wheel && \
-	pip install -r requirements.txt
+	pip install fastapi==0.115.5 uvicorn==0.30.6 bleurt==0.0.2 numpy==2.1.3
 
 COPY app.py ./app.py
 

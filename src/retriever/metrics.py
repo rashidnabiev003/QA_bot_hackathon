@@ -1,6 +1,6 @@
 # per_query_eval_strict.py
 from __future__ import annotations
-import json, re, os
+import json, re, os, logging
 from typing import Optional, List, Dict, Any
 import numpy as np
 from FlagEmbedding import BGEM3FlagModel
@@ -85,6 +85,7 @@ class MetricComputer:
                 if scores:
                     return float(scores[0])
         except Exception:
+            logging.exception("BLEURT HTTP call failed")
             return 0.0
         return 0.0
 
@@ -134,7 +135,7 @@ def evaluate_query(engine, query: str, gold_answer: str, pred_answer: str, gold_
         "query": query,
         "pred_answer": pred_answer,
         "gold_answer": gold_answer,
-        "bleurt20": mc.bleurt20(pred_answer, gold_answer),
+        "bleurt20": (mc.bleurt20(pred_answer, gold_answer) if mc else 0.0),
         "sas_user_bge_m3": mc.sas_user_bge_m3(pred_answer, gold_answer),
         "rougeL_stem_ru_f1": mc.rougeL_ru(pred_answer, gold_answer),
         "retrieval": None,

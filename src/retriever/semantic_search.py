@@ -19,9 +19,12 @@ class SemanticSearch:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.embedding_model = BGEM3FlagModel("BAAI/bge-m3", device=self.device, use_fp16=config.use_fp16_rerank if hasattr(config, 'use_fp16_rerank') else True)
         self.rerank_model = BGEM3FlagModel("BAAI/bge-m3", device=config.rerank_device, use_fp16=config.use_fp16_rerank)
-        self.meta_path = self.workdir / "chunks.jsonl"
-        self.embed_path = self.workdir / "embeddings.npy"
-        self.index_path = self.workdir / "faiss.index"
+        base_dir = Path("src/data")
+        base_dir.mkdir(parents=True, exist_ok=True)
+        # хранить данные индекса внутри src/data
+        self.meta_path = base_dir / "chunks.jsonl"
+        self.embed_path = base_dir / "embeddings.npy"
+        self.index_path = base_dir / "faiss.index"
         self.meta: List[Dict] = []
         self.emb: Optional[np.ndarray] = None
         self.index = None
@@ -74,12 +77,19 @@ class SemanticSearch:
     def retrieve(self, query: str, topn: int = 50, topk: int = 5) -> dict:
         q = self._embed([query])
         D, I = self.index.search(q, topn)
-        cand = [(i, self.meta[i]["text"]) for i in I[0]]
+        cand = []
+        for idx in I[0]:
+            if idx < 0 or idx >= len(self.meta):
+                continue
+            cand.append((int(idx), self.meta[idx]["text"]))
+        if not cand:
+            return {"query": query, "results": []}
         pairs = [[query, t] for _, t in cand]
         scores = self.rerank_model.compute_score(pairs)
         s = scores.get("colbert+sparse+dense") or scores.get("sparse+dense") or scores.get("colbert") or scores
         s = np.array(s, dtype="float32") if isinstance(s, list) else np.full(len(cand), float(s), dtype="float32")
-        order = np.argsort(-s)[:topk]
-        res = [{"id": int(cand[r][0]), "score": float(s[r]), "text": cand[r][1]} for r in order]
+        order = np.argsort(-s)
+        topk = min(topk, len(order))
+        res = [{"id": int(cand[r][0]), "score": float(s[r]), "text": cand[r][1]} for r in order[:topk]]
         return {"query": query, "results": res}
     

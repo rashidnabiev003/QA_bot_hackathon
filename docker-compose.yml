@@ -12,8 +12,6 @@ services:
       - BLEURT_URL=http://bleurt:8080
     volumes:
       - ./src:/app/src
-      - ./index:/app/index
-      - ./data:/app/data
     depends_on:
       - ollama
       - vllm

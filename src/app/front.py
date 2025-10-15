@@ -3,13 +3,10 @@ from tkinter import ttk, scrolledtext
 import asyncio
 import json
 import os
+import logging
 from pathlib import Path
 from typing import Dict, Any, List
-from src.retriever.semantic_search import SemanticSearch
-from src.llm.llm_chat_bot_ollama import generate_answer
-from src.llm.llm_reranker_vllm import rerank_with_llm
-from src.retriever.metrics import MetricComputer
-from src.schemas.pydantic_schemas import BuildConfig, MetricConfig
+from src.pipeline.orchestrator import get_pipeline
 
 STYLE = {
 	"font_family": "Arial",
@@ -32,31 +29,8 @@ class QABotApp:
 		self.is_processing = False
 		self.use_llm_reranking = tk.BooleanVar(value=False)
 		
-		self.build_config = BuildConfig(
-			batch_size=32,
-			force_cpu=False,
-			rerank_device="cuda",
-			use_fp16_rerank=True,
-			chunk_size=500,
-			overlap_size=50
-		)
-		
-		self.metric_config = MetricConfig(
-			bleurt_ckpt="BLEURT-20",
-			sas_model="BAAI/bge-m3",
-			sas_device="cuda",
-			sas_fp16=True,
-			bleurt_endpoint=os.getenv("BLEURT_URL", "http://localhost:8088")
-		)
-		
-		try:
-			self.search_engine = SemanticSearch("./index", self.build_config)
-			self.search_engine.load()
-			self.metric_computer = MetricComputer(self.metric_config)
-		except Exception as e:
-			print(f"Ошибка инициализации: {e}")
-			self.search_engine = None
-			self.metric_computer = None
+		logging.basicConfig(level=logging.INFO)
+		self.pipeline = get_pipeline()
 		
 		self.create_widgets()
 		self.apply_style()
@@ -274,30 +248,10 @@ class QABotApp:
 	
 	async def process_query(self, query: str):
 		try:
-			if not self.search_engine:
-				self.add_chat_message("Система поиска не инициализирована", is_user=False)
-				return
-			
-			result = self.search_engine.retrieve(query, topn=50, topk=10)
-			contexts = result["results"]
-			
-			if self.use_llm_reranking.get():
-				contexts = await rerank_with_llm(
-					query=query,
-					chunks=contexts,
-					topk=5,
-					vllm_url="http://localhost:8000"
-				)
-			
-			self.update_contexts(contexts[:5])
-			
-			answer_data = await generate_answer(
-				query=query,
-				contexts=contexts[:5],
-				ollama_url=os.getenv("OLLAMA_URL", "http://localhost:11434"),
-				model=os.getenv("OLLAMA_MODEL", "open-ai/gpt-oss-20b")
-			)
-			
+			res = await self.pipeline.answer(query, topn=50, topk=5, use_llm_rerank=self.use_llm_reranking.get())
+			contexts = res.get("contexts", [])
+			self.update_contexts(contexts)
+			answer_data = res.get("answer", {})
 			answer = answer_data.get("answer", "Ошибка генерации ответа")
 			self.add_chat_message(answer, is_user=False)
 			
@@ -314,7 +268,7 @@ class QABotApp:
 			
 		except Exception as e:
 			self.add_chat_message(f"Ошибка: {str(e)}", is_user=False)
-			print(f"Ошибка обработки запроса: {e}")
+			logging.exception("Ошибка обработки запроса")
 
 if __name__ == "__main__":
 	root = tk.Tk()

@@ -1,0 +1,88 @@
+services:
+  app:
+    build: .
+    container_name: qa_bot_app
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=open-ai/gpt-oss-20b
+      - VLLM_URL=http://vllm:8000
+      - BLEURT_URL=http://bleurt:8080
+    volumes:
+      - ./src:/app/src
+      - ./index:/app/index
+      - ./data:/app/data
+    depends_on:
+      - ollama
+      - vllm
+      - bleurt
+    restart: unless-stopped
+
+  bleurt:
+    build: ./bleurt-service
+    image: bleurt-service:cpu
+    container_name: bleurt20
+    environment:
+      - BLEURT_CHECKPOINT=/models/BLEURT-20
+    volumes:
+      - ./models:/models:ro
+    ports:
+      - "8088:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: qa_bot_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    command: serve
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: qa_bot_vllm
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
+      - HF_ENDPOINT=http://5.129.204.167:8081
+      - NVIDIA_VISIBLE_DEVICES=1
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - VLLM_LOGGING_LEVEL=DEBUG
+    ipc: host
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    ports:
+      - "8001:8000"
+    command: >
+      --model Qwen/Qwen3-4B-Thinking-2507
+      --trust-remote-code 
+      --quantization fp8
+      --tensor-parallel-size 1
+      --max-model-len 2048
+      --gpu-memory-utilization 0.8
+      --download-dir /root/.cache/huggingface
+    shm_size: "2g"
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${VLLM_GPU_COUNT:-all}
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 2m
+
+volumes:
+  ollama_data:

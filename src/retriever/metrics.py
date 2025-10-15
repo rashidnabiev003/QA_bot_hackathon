@@ -1,13 +1,16 @@
 # per_query_eval_strict.py
 from __future__ import annotations
-import json, re
-from dataclasses import dataclass
+import json, re, os
 from typing import Optional, List, Dict, Any
 import numpy as np
-from bleurt import score as bleurt_score
 from FlagEmbedding import BGEM3FlagModel
 from nltk.stem.snowball import RussianStemmer
 from src.schemas.pydantic_schemas import MetricConfig
+
+try:
+    from bleurt import score as bleurt_score  # optional; prefer HTTP service
+except Exception:  # pragma: no cover
+    bleurt_score = None
 
 def _tok_ru(x: str) -> List[str]:
     return re.findall(r"\w+", x.lower(), flags=re.UNICODE)
@@ -56,11 +59,44 @@ def map_at_100(rank: int) -> float:
 
 class MetricComputer:
     def __init__(self, cfg: MetricConfig):
-        self.bleurt = bleurt_score.BleurtScorer(cfg.bleurt_ckpt)
+        self.cfg = cfg
+        self.bleurt_url = cfg.bleurt_endpoint or os.getenv("BLEURT_URL")
+        self.bleurt = None
+        if not self.bleurt_url and bleurt_score is not None:
+            try:
+                self.bleurt = bleurt_score.BleurtScorer(cfg.bleurt_ckpt)
+            except Exception:
+                self.bleurt = None
         self.sas = BGEM3FlagModel(cfg.sas_model, device=cfg.sas_device, use_fp16=cfg.sas_fp16)
 
+    def _bleurt20_http(self, pred: str, ref: str) -> float:
+        try:
+            import urllib.request, urllib.error
+            payload = json.dumps({"references": [ref], "candidates": [pred]}).encode("utf-8")
+            req = urllib.request.Request(
+                url=f"{self.bleurt_url}/score",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                scores = data.get("scores") or []
+                if scores:
+                    return float(scores[0])
+        except Exception:
+            return 0.0
+        return 0.0
+
     def bleurt20(self, pred: str, ref: str) -> float:
-        return float(self.bleurt.score(references=[ref], candidates=[pred])[0])
+        if self.bleurt_url:
+            return self._bleurt20_http(pred, ref)
+        if self.bleurt is not None:
+            try:
+                return float(self.bleurt.score(references=[ref], candidates=[pred])[0])
+            except Exception:
+                return 0.0
+        return 0.0
 
     def sas_user_bge_m3(self, pred: str, ref: str) -> float:
         out = self.sas.compute_score([[pred, ref]])

@@ -17,8 +17,8 @@ class SemanticSearch:
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.config = config
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.embedding_model = "BAAI/bge-m3"
-        self.rerank_model = "BAAI/bge-m3"
+        self.embedding_model = BGEM3FlagModel("BAAI/bge-m3", device=self.device, use_fp16=config.use_fp16_rerank if hasattr(config, 'use_fp16_rerank') else True)
+        self.rerank_model = BGEM3FlagModel("BAAI/bge-m3", device=config.rerank_device, use_fp16=config.use_fp16_rerank)
         self.meta_path = self.workdir / "chunks.jsonl"
         self.embed_path = self.workdir / "embeddings.npy"
         self.index_path = self.workdir / "faiss.index"
@@ -27,8 +27,8 @@ class SemanticSearch:
         self.index = None
 
     def _chunk(self, text: str) -> List[Dict]:
-        s = self.cfg.chunk_size
-        o = self.cfg.chunk_overlap
+        s = self.config.chunk_size
+        o = self.config.overlap_size
         step = max(1, s - o)
         i, out, cid = 0, [], 0
         while i < len(text):
@@ -44,9 +44,13 @@ class SemanticSearch:
         return x / n
 
     def _embed(self, texts: List[str]) -> np.ndarray:
-        out = self.embedding_model.encode(texts, batch_size=self.config.batch_size)["dence_vecs"]
-        v = out["dense_vecs"]
-        return self._l2_normalize(v.astype(np.float32))
+        if isinstance(self.embedding_model, BGEM3FlagModel):
+            out = self.embedding_model.encode(texts, batch_size=self.config.batch_size)
+            v = out["dense_vecs"]
+            return self._l2_normalize(v.astype(np.float32))
+        else:
+            v = self.embedding_model.encode(texts, batch_size=self.config.batch_size)
+            return self._l2_normalize(v.astype(np.float32))
     
     def build_from_text(self, text: str) -> None:
         chunks = self._chunk(text)

@@ -52,8 +52,8 @@ def _normalize_json_string(text: str) -> str:
 async def generate_answer(
 	query: str,
 	contexts: List[Dict[str, Any]],
-	ollama_url: str = "http://localhost:11434",
-	model: str = "open-ai/gpt-oss-20b"
+	ollama_url,
+	model 
 ) -> Dict[str, Any]:
 	"""Генерирует ответ на вопрос используя Ollama"""
 	system_prompt, user_prompt = _read_prompt(1)
@@ -82,7 +82,7 @@ async def generate_answer(
 			async with session.post(
 				f"{ollama_url}/api/chat",
 				json=payload,
-				timeout=aiohttp.ClientTimeout(total=60)
+				timeout=aiohttp.ClientTimeout(total=180)
 			) as resp:
 				if resp.status != 200:
 					error_text = await resp.text()

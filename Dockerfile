@@ -38,4 +38,4 @@ RUN python -c "import nltk; nltk.download('punkt')"
 
 EXPOSE 8000
 
-CMD ["python", "-m", "src.app.front"]
+CMD ["uvicorn", "src.app.server:app", "--host", "0.0.0.0", "--port", "8000"]

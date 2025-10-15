@@ -53,20 +53,24 @@ async def _score_one(session: aiohttp.ClientSession, vllm_url: str, model: str, 
         "max_tokens": 64
     }
     try:
-        async with session.post(f"{vllm_url}/v1/chat/completions", json=payload, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+        async with session.post(f"{vllm_url}/v1/chat/completions", json=payload, timeout=aiohttp.ClientTimeout(total=60)) as resp:
             if resp.status != 200:
+                error_text = await resp.text()
+                logger.warning(f"vLLM returned {resp.status}: {error_text[:200]}")
                 return 0.0
             data = await resp.json()
             text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
             scores = _extract_scores_from_json(text)
             if not scores:
+                logger.warning(f"No scores extracted from vLLM response: {text[:100]}")
                 return 0.0
             s = float(scores[0])
             if s > 1.0: s = s / 10.0
             if s < 0.0: s = 0.0
             if s > 1.0: s = 1.0
             return s
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Error scoring chunk: {e}")
         return 0.0
 
 async def rerank_with_llm(
@@ -77,6 +81,7 @@ async def rerank_with_llm(
     model: str = "Qwen/Qwen3-4B-Thinking-2507"
 ) -> List[Dict[str, Any]]:
     """Асинхронный LLM-реранкинг: каждый текст скормлен отдельно, результат в [0,1]."""
+    logger.info(f"Starting LLM reranking for {len(chunks)} chunks with model {model} at {vllm_url}")
     system_prompt, user_prompt = _read_prompt(1)
     try:
         async with aiohttp.ClientSession() as session:
@@ -84,11 +89,14 @@ async def rerank_with_llm(
             for ch in chunks:
                 chunk_text = ch.get('text', '')[:1000]
                 tasks.append(_score_one(session, vllm_url, model, system_prompt, user_prompt, query, chunk_text))
+            logger.info(f"Created {len(tasks)} scoring tasks, starting parallel execution...")
             scores = await asyncio.gather(*tasks, return_exceptions=False)
+            logger.info(f"Received scores: {scores[:5]}... (showing first 5)")
             for i, ch in enumerate(chunks):
                 ch["llm_score"] = float(scores[i])
             reranked = sorted(chunks, key=lambda x: x.get("llm_score", 0.0), reverse=True)
+            logger.info(f"Reranked {len(reranked)} chunks, returning top {topk}")
             return reranked[:topk]
     except Exception as e:
-        logger.error(f"Error in async reranking: {e}")
+        logger.error(f"Error in async reranking: {e}", exc_info=True)
         return chunks[:topk]

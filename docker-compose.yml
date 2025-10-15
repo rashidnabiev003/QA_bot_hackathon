@@ -3,13 +3,16 @@ services:
     build: .
     container_name: qa_bot_app
     ports:
-      - "8000:8000"
+      - "${APP_PORT:-8000}:8000"
     environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
       - PYTHONUNBUFFERED=1
       - OLLAMA_URL=http://ollama:11434
-      - OLLAMA_MODEL=open-ai/gpt-oss-20b
+      - OLLAMA_MODEL=gpt-oss:20b
       - VLLM_URL=http://vllm:8000
       - BLEURT_URL=http://bleurt:8080
+      - AUTO_BUILD_INDEX=1
+      - DOCX_PATH=/app/src/data/input.docx
     volumes:
       - ./src:/app/src
     depends_on:
@@ -19,7 +22,9 @@ services:
     restart: unless-stopped
 
   bleurt:
-    build: ./bleurt-service
+    build:
+      context: ./bleurt-service
+      dockerfile: Dockerfile
     image: bleurt-service:cpu
     container_name: bleurt20
     environment:
@@ -29,7 +34,7 @@ services:
     ports:
       - "8088:8080"
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/healthz"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -38,7 +43,7 @@ services:
     image: ollama/ollama:latest
     container_name: qa_bot_ollama
     ports:
-      - "11434:11434"
+      - "11435:11434" 
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped
@@ -57,7 +62,7 @@ services:
     volumes:
       - ~/.cache/huggingface:/root/.cache/huggingface
     ports:
-      - "8001:8000"
+      - "${VLLM_PORT:-8001}:8000"
     command: >
       --model Qwen/Qwen3-4B-Thinking-2507
       --trust-remote-code 

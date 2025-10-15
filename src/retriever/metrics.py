@@ -1,5 +1,5 @@
-# per_query_eval_strict.py
 from __future__ import annotations
+import urllib.request
 import json, re, os, logging
 from typing import Optional, List, Dict, Any
 import numpy as np
@@ -7,10 +7,7 @@ from FlagEmbedding import BGEM3FlagModel
 from nltk.stem.snowball import RussianStemmer
 from src.schemas.pydantic_schemas import MetricConfig
 
-try:
-    from bleurt import score as bleurt_score  # optional; prefer HTTP service
-except Exception:  # pragma: no cover
-    bleurt_score = None
+bleurt_score = None
 
 def _tok_ru(x: str) -> List[str]:
     return re.findall(r"\w+", x.lower(), flags=re.UNICODE)
@@ -62,16 +59,10 @@ class MetricComputer:
         self.cfg = cfg
         self.bleurt_url = cfg.bleurt_endpoint or os.getenv("BLEURT_URL")
         self.bleurt = None
-        if not self.bleurt_url and bleurt_score is not None:
-            try:
-                self.bleurt = bleurt_score.BleurtScorer(cfg.bleurt_ckpt)
-            except Exception:
-                self.bleurt = None
         self.sas = BGEM3FlagModel(cfg.sas_model, device=cfg.sas_device, use_fp16=cfg.sas_fp16)
 
     def _bleurt20_http(self, pred: str, ref: str) -> float:
         try:
-            import urllib.request, urllib.error
             payload = json.dumps({"references": [ref], "candidates": [pred]}).encode("utf-8")
             req = urllib.request.Request(
                 url=f"{self.bleurt_url}/score",
@@ -84,8 +75,8 @@ class MetricComputer:
                 scores = data.get("scores") or []
                 if scores:
                     return float(scores[0])
-        except Exception:
-            logging.exception("BLEURT HTTP call failed")
+        except Exception as e:
+            logging.warning(f"BLEURT HTTP call failed: {e}")
             return 0.0
         return 0.0
 
@@ -101,7 +92,7 @@ class MetricComputer:
 
     def sas_user_bge_m3(self, pred: str, ref: str) -> float:
         out = self.sas.compute_score([[pred, ref]])
-        for k in ("colbert+sparse+dense"):
+        for k in ("colbert+sparse+dense", "sparse+dense", "colbert"):
             if isinstance(out, dict) and k in out:
                 v = out[k]
                 return float(v[0] if isinstance(v, list) else v)
@@ -127,6 +118,42 @@ class MetricComputer:
             "map@100": map_at_100(best),
             "best_rank": float(best),
         }
+    
+    def compute_all(self, query: str, answer: str, contexts: List[str], ground_truth: Optional[str] = None) -> Dict[str, Any]:
+        """Вычисляет все метрики для ответа и контекстов"""
+        result = {
+            "bleurt_avg": 0,
+            "bleurt_per_context": [],
+            "sas_avg": 0,
+            "sas_per_context": [],
+            "rouge_l": 0,
+            "ndcg": 0,
+            "mrr": 0,
+            "map": 0,
+        }
+        
+        # Метрики для каждого контекста относительно ответа (ВСЕГДА вычисляем)
+        for ctx in contexts:
+            result["bleurt_per_context"].append(self.bleurt20(ctx, answer))
+            result["sas_per_context"].append(self.sas_user_bge_m3(ctx, answer))
+        
+        # Средние значения
+        if result["bleurt_per_context"]:
+            result["bleurt_avg"] = sum(result["bleurt_per_context"]) / len(result["bleurt_per_context"])
+        if result["sas_per_context"]:
+            result["sas_avg"] = sum(result["sas_per_context"]) / len(result["sas_per_context"])
+        
+        # Метрики answer vs ground_truth (если есть)
+        if ground_truth:
+            result["rouge_l"] = self.rougeL_ru(answer, ground_truth)
+            # Retrieval метрики
+            if contexts:
+                retr_metrics = self.retrieval_metrics(ground_truth, contexts, k=min(10, len(contexts)))
+                result["ndcg"] = retr_metrics.get("ndcg@10", 0)
+                result["mrr"] = retr_metrics.get("mrr@10", 0)
+                result["map"] = retr_metrics.get("map@100", 0)
+        
+        return result
 
 def evaluate_query(engine, query: str, gold_answer: str, pred_answer: str, gold_context: Optional[str] = None, topn: int = 50, topk: int = 10, mc: Optional[MetricComputer] = None) -> Dict[str, Any]:
     r = engine.retrieve(query, topn=topn, topk=topk)
@@ -159,6 +186,3 @@ def evaluate_many(engine, batch: List[Dict[str, Any]], mc: MetricComputer, topn:
             mc=mc
         ))
     return res
-
-def evaluate_many_print(engine, batch: List[Dict[str, Any]], mc: MetricComputer, topn: int = 50, topk: int = 10) -> None:
-    print(json.dumps(evaluate_many(engine, batch, mc, topn=topn, topk=topk), ensure_ascii=False, indent=2))

@@ -12,7 +12,8 @@ build:
 	docker compose build
 
 up:
-	docker compose up -d
+	docker compose up -d --build
+	@echo "Chat on: http://localhost:8000"
 
 down:
 	docker compose down

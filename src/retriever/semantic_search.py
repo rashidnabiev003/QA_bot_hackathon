@@ -9,6 +9,7 @@ from typing import List, Dict, Tuple, Optional, Any
 from sentence_transformers import SentenceTransformer
 from FlagEmbedding import BGEM3FlagModel
 from src.schemas.pydantic_schemas import BuildConfig
+from transformers import AutoTokenizer 
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,6 @@ class SemanticSearch:
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.config = config
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        # Ленивая инициализация, чтобы не грузить модели при старте
-        self.embedding_model = None
-        self.rerank_model = None
         self.meta_path = self.workdir / "chunks.jsonl"
         self.embed_path = self.workdir / "embeddings.npy"
         self.index_path = self.workdir / "faiss.index"
@@ -29,43 +27,75 @@ class SemanticSearch:
         self.emb: Optional[np.ndarray] = None
         self.index = None
 
+        logger.info("Loading embedding model: BAAI/bge-m3 on %s (fp16=%s)", self.device, getattr(self.config, 'use_fp16_rerank', True))
+        self.embedding_model = SentenceTransformer(
+                "deepvk/USER-bge-m3",
+                device=self.device,
+            )
+
+        self.rerank_model = BGEM3FlagModel(
+                    "BAAI/bge-reranker-v2-m3",
+                    device=self.device,
+                    use_fp16=getattr(self.config, 'use_fp16_rerank', True)
+                )
+
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            getattr(
+                self.config,
+                "tokenizer_name",
+                  getattr(self.config, "embed_model", "deepvk/USER-bge-m3")
+                  ),
+            use_fast=True
+            )
+        
+    def _tok_len(self, text: str) -> int:
+        return len(self.tokenizer.encode(text, add_special_tokens=False))
+
+    def _truncate_tokens(self, text: str, max_toks: int) -> str:
+        ids = self.tokenizer.encode(text, add_special_tokens=False)
+        if len(ids) <= max_toks:
+            return text
+        return self.tokenizer.decode(ids[:max_toks], skip_special_tokens=True)
+        
     def _sentences(self, text: str) -> List[str]:
         text = re.sub(r"\s+", " ", text).strip()
         s = re.split(r"(?<=[\.\!\?…])\s+(?=[A-ZА-ЯЁ0-9«(])", text)
         return [t.strip() for t in s if t.strip()]
     
-    def _chunk(self, text: str) -> List[Dict[str, Any]]:
-            sents = self._sentences(text)
-            out, buf, clen = [], [], 0
-            for sent in sents:
-                if buf and clen + len(sent) > self.config.chunk_size:
-                    out.append({"id": len(out), "text": " ".join(buf)})
-                    over = []
-                    while buf and sum(len(x) for x in over) < self.config.overlap_size:
-                        over.insert(0, buf.pop())
-                    buf = over + [sent]
-                    clen = sum(len(x) for x in buf)
-                else:
-                    buf.append(sent); clen += len(sent)
-            if buf:
-                out.append({"id": len(out), "text": " ".join(buf)})
-            return out
+    def _chunk(self, text: str):
+        max_t = self.config.chunk_size
+        over_t = self.config.overlap_size
+        sents = [t.strip() for t in re.split(r"(?<=[\.\!\?…])\s+(?=[A-ZА-ЯЁ0-9«(])", re.sub(r"\s+", " ", text).strip()) if t.strip()]
+        out, buf, tokc = [], [], 0
+        for s in sents:
+            ls = self._tok_len(s)
+            if buf and tokc + ls > max_t:
+                ch = " ".join(buf)
+                out.append({"id": len(out), "text": ch, "tok_len": tokc})
+                keep, keep_len = [], 0
+                for ss in reversed(buf):
+                    lss = self._tok_len(ss)
+                    if keep_len + lss > over_t: break
+                    keep.insert(0, ss); keep_len += lss
+                buf, tokc = keep + [s], keep_len + ls
+            else:
+                buf.append(s); tokc += ls
+        if buf:
+            out.append({"id": len(out), "text": " ".join(buf), "tok_len": tokc})
+        return out
 
     def _l2_normalize(self, x: np.ndarray) -> np.ndarray:
         n = np.linalg.norm(x, axis=1, keepdims=True) + 1e-12
         return x / n
 
-    def _embed(self, texts: List[str]) -> np.ndarray:
-        if self.embedding_model is None:
-            logger.info("Loading embedding model: BAAI/bge-m3 on %s (fp16=%s)", self.device, getattr(self.config, 'use_fp16_rerank', True))
-            self.embedding_model = BGEM3FlagModel(
-                "BAAI/bge-m3",
-                device=self.device,
-                use_fp16=getattr(self.config, 'use_fp16_rerank', True)
-            )
-        out = self.embedding_model.encode(texts, batch_size=self.config.batch_size)
-        vecs = out["dense_vecs"]
-        return self._l2_normalize(vecs)
+    def _embed(self, texts: list[str]) -> np.ndarray:
+        max_embed_t = int(getattr(self.config, "embed_max_tokens", getattr(self.config, "chunk_size", 256)))
+        prep = [self._truncate_tokens(t, max_embed_t) for t in texts]
+        out = self.embedding_model.encode(prep, batch_size=self.config.batch_size)
+        vecs = out.get("dense_vecs", out) if isinstance(out, dict) else out
+        vecs = np.asarray(vecs, dtype=np.float32)
+        faiss.normalize_L2(vecs)
+        return vecs
 
     def build_from_text(self, text: str) -> None:
         logger.info("Chunking text for index build: chunk_size=%s, overlap=%s", self.config.chunk_size, self.config.overlap_size)
@@ -84,15 +114,14 @@ class SemanticSearch:
 
 
     def load(self) -> None:
-        try:
-            logger.info("Loading FAISS index from %s", self.index_path)
-            self.index = faiss.read_index(str(self.index_path))
-            self.meta = [json.loads(x) for x in self.meta_path.read_text(encoding="utf-8").splitlines()]
-            self.emb = None
-            logger.info("Index loaded: vectors=%s, meta=%s", self.index.ntotal if self.index else 0, len(self.meta))
-            return
-        except Exception as e:
-            logging.warning(f"Failed to load FAISS index: {e}")
+        if not self.index_path.exists():
+            raise FileNotFoundError(f"No FAISS index: {self.index_path}")
+        if not self.meta_path.exists():
+            raise FileNotFoundError(f"No metadata: {self.meta_path}")
+        self.index = faiss.read_index(str(self.index_path))
+        self.meta = [json.loads(x) for x in self.meta_path.read_text(encoding="utf-8").splitlines()]
+        if len(self.meta) != self.index.ntotal:
+            raise ValueError(f"meta/index mismatch: {len(self.meta)} vs {self.index.ntotal}")
 
     def retrieve(self, query: str, topn: int = 50, topk: int = 5) -> Dict:
         if self.index is None or not self.meta:
@@ -100,13 +129,13 @@ class SemanticSearch:
         qv = self._embed([query])
         D, I = self.index.search(qv, topn) 
         cand = [(int(i), self.meta[int(i)]["text"], float(D[0, k])) for k, i in enumerate(I[0])]
+        if getattr(self.config, "enable_rerank", True):
+            q_max = 128
+            d_max = 384
+            q_r = self._truncate_tokens(query, q_max)
+            pairs = [[q_r, self._truncate_tokens(t, d_max)] for _, t, _ in cand]
+            scores = self.rerank_model.compute_score(pairs)
         if getattr(self.config, 'enable_rerank', True):
-            if self.rerank_model is None:
-                self.rerank_model = BGEM3FlagModel(
-                    "BAAI/bge-reranker-v2-m3",
-                    device=self.device,
-                    use_fp16=getattr(self.config, 'use_fp16_rerank', True)
-                )
             pairs = [[query, t] for _, t, _ in cand]
             out = self.rerank_model.compute_score(pairs)  
             s = out.get("colbert+sparse+dense") or out.get("sparse+dense") or out.get("colbert") or out

@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 @lru_cache(maxsize=4)
-def _read_prompt(stage: int) -> Tuple[str, str]:
+def _read_prompt() -> Tuple[str, str]:
     """Кэшированное чтение промптов из файлов"""
     base = os.path.join(os.path.dirname(__file__), "..", "prompts", f"llm_reranking")
     system_path = os.path.abspath(os.path.join(base, "system.txt"))
@@ -99,7 +99,7 @@ async def rerank_with_llm(
 ) -> List[Dict[str, Any]]:
     """Асинхронный LLM-реранкинг: каждый текст скормлен отдельно, результат в [0,1]."""
     logger.info(f"Starting LLM reranking for {len(chunks)} chunks with model {model} at {vllm_url}")
-    system_prompt, user_prompt = _read_prompt(1)
+    system_prompt, user_prompt = _read_prompt()
     try:
         async with aiohttp.ClientSession() as session:
             tasks = []

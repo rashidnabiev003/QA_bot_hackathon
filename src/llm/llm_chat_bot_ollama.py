@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 @lru_cache(maxsize=4)
-def _read_prompt(stage: int) -> Tuple[str, str]:
+def _read_prompt() -> Tuple[str, str]:
 	"""Кэшированное чтение промптов из файлов"""
 	base = os.path.join(os.path.dirname(__file__), "..", "prompts", f"llm_response")
 	system_path = os.path.abspath(os.path.join(base, "system.txt"))
@@ -56,7 +56,7 @@ async def generate_answer(
 	model 
 ) -> Dict[str, Any]:
 	"""Генерирует ответ на вопрос используя Ollama"""
-	system_prompt, user_prompt = _read_prompt(1)
+	system_prompt, user_prompt = _read_prompt()
 	
 	context_text = "\n\n".join([
 		f"Фрагмент {i+1} (score: {ctx.get('score', 0):.3f}):\n{ctx['text']}"
@@ -82,7 +82,7 @@ async def generate_answer(
 			async with session.post(
 				f"{ollama_url}/api/chat",
 				json=payload,
-				timeout=aiohttp.ClientTimeout(total=180)
+				timeout=aiohttp.ClientTimeout(total=300)
 			) as resp:
 				if resp.status != 200:
 					error_text = await resp.text()

@@ -18,12 +18,12 @@ class QAPipeline:
             index_dir = os.getenv("INDEX_DIR", "src/data")
         self.index_dir = index_dir
         self.build_config = BuildConfig(
-            batch_size=32,
+            batch_size=16,
             force_cpu=False,
             rerank_device=os.getenv("RERANK_DEVICE", "cuda"),
             use_fp16_rerank=True,
-            chunk_size=int(os.getenv("CHUNK_SIZE", "800")),
-            overlap_size=int(os.getenv("CHUNK_OVERLAP", "400")),
+            chunk_size=128,
+            overlap_size=50,
         )
         self.metric_config = MetricConfig(
             bleurt_ckpt=os.getenv("BLEURT_CHECKPOINT", "BLEURT-20"),

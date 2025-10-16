@@ -40,6 +40,16 @@ async def chat(req: ChatRequest):
 	)
 	return res
 
+@app.post("/rebuild_index")
+async def rebuild_index():
+	try:
+		pipe = _get_pipeline()
+		await asyncio.to_thread(pipe.rebuild_index)
+		return {"ok": True, "message": "Index rebuilt successfully"}
+	except Exception as e:
+		logger.exception("Rebuild index failed")
+		return {"ok": False, "error": str(e)}
+
 HTML = """
 <!doctype html>
 <html>
@@ -88,6 +98,22 @@ HTML = """
     }
     window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('send').addEventListener('click', sendQuery);
+      const rebuildBtn = document.createElement('button');
+      rebuildBtn.id = 'rebuild';
+      rebuildBtn.className = 'send';
+      rebuildBtn.style.background = '#dc3545';
+      rebuildBtn.textContent = 'Пересобрать индекс';
+      document.querySelector('.input').appendChild(rebuildBtn);
+      rebuildBtn.addEventListener('click', async () => {
+        rebuildBtn.disabled = true; const old = rebuildBtn.textContent; rebuildBtn.textContent = 'Пересборка...';
+        try {
+          const res = await fetch('/rebuild_index', { method: 'POST' });
+          const data = await res.json();
+          alert(data.ok ? 'Индекс пересобран' : ('Ошибка: ' + data.error));
+        } finally {
+          rebuildBtn.disabled = false; rebuildBtn.textContent = old;
+        }
+      });
     });
   </script>
 </head>

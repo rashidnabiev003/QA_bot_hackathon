@@ -14,4 +14,4 @@ class MetricConfig(BaseModel):
 	sas_model: str 
 	sas_device: str 
 	sas_fp16: bool
-	bleurt_endpoint: str | None = None
+	bleurt_endpoint: str 

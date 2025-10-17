@@ -1,6 +1,6 @@
 [project]
 name = "QA_bot_hackathon"
-version = "1.0.0"
+version = "2.0.0"
 description = "QA chat-bot for hackathon"
 authors = [
     { name = "Набиев Рашидхон", email = "nabievrasheed@yandex.ru"},
@@ -22,6 +22,12 @@ dependencies = [
     "FlagEmbedding>=1.2.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
+    "langchain>=0.3",
+    "langchain-community>=0.3",
+    "langchain-text-splitters",
+    "rank-bm25",
+    "docx2txt",
+    "dotenv"
 ]
 
 [dependency-groups]

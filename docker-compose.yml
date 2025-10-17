@@ -13,6 +13,7 @@ services:
       - BLEURT_URL=http://bleurt:8080
       - AUTO_BUILD_INDEX=1
       - DOCX_PATH=/app/src/data/input.docx
+      - CUDA_VISIBLE_DEVICES=0
     volumes:
       - ./src:/app/src
     depends_on:
@@ -78,7 +79,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: ${VLLM_GPU_COUNT:-all}
+              count: 1
               capabilities: [gpu]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]

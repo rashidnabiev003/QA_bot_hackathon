@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential git curl && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /srv
+WORKDIR /srс
 
 RUN pip install --upgrade pip setuptools wheel && \
     pip install fastapi==0.115.5 uvicorn==0.30.6 \

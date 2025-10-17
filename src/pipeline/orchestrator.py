@@ -3,6 +3,7 @@ import asyncio
 import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from dotenv import load_dotenv
 
 from src.schemas.pydantic_schemas import BuildConfig, MetricConfig
 from src.retriever.semantic_search import SemanticSearch
@@ -10,26 +11,28 @@ from src.retriever.metrics import MetricComputer
 from src.llm.llm_reranker_vllm import rerank_with_llm
 from src.llm.llm_chat_bot_ollama import generate_answer
 
+load_dotenv()
+
 logger = logging.getLogger(__name__)
 
 class QAPipeline:
     def __init__(self, index_dir: str = None):
         if index_dir is None:
-            index_dir = os.getenv("INDEX_DIR", "src/data")
+            index_dir = os.getenv("INDEX_DIR")
         self.index_dir = index_dir
         self.build_config = BuildConfig(
             batch_size=16,
             force_cpu=False,
-            rerank_device=os.getenv("RERANK_DEVICE", "cuda"),
+            rerank_device=os.getenv("RERANK_DEVICE"),
             use_fp16_rerank=True,
             chunk_size=128,
             overlap_size=50,
         )
         self.metric_config = MetricConfig(
-            bleurt_ckpt=os.getenv("BLEURT_CHECKPOINT", "BLEURT-20"),
+            bleurt_ckpt=os.getenv("BLEURT_CHECKPOINT"),
             sas_model=os.getenv("SAS_MODEL", "BAAI/bge-reranker-v2-m3"),
-            sas_device=os.getenv("SAS_DEVICE", "cuda"),
-            sas_fp16=True,
+            sas_device=os.getenv("SAS_DEVICE", "cpu"),
+            sas_fp16=False,
             bleurt_endpoint=os.getenv("BLEURT_URL"),
         )
         self.engine = SemanticSearch(self.index_dir, self.build_config)
@@ -54,7 +57,7 @@ class QAPipeline:
                 return
 
             self.engine.load()
-            if self.engine.index is None:
+            if not getattr(self.engine, "ready", False):
                 auto = os.getenv("AUTO_BUILD_INDEX", "0") in ("1", "true", "True")
                 if auto:
                     self._maybe_build_index_from_docx()
@@ -69,15 +72,11 @@ class QAPipeline:
     def rebuild_index(self) -> None:
         """Удаляет старый индекс и пересобирает его из DOCX."""
         try:
-            # Удаляем файлы индекса, если существуют
-            for p in [self.engine.index_path, self.engine.embed_path, self.engine.meta_path, getattr(self.engine, 'kb_meta', None)]:
-                if p is None:
-                    continue
-                try:
-                    if p.exists():
-                        p.unlink()
-                except Exception as e:
-                    logger.warning(f"Failed to remove {p}: {e}")
+            # Удаляем артефакты индекса через API движка
+            try:
+                self.engine.clear_index()
+            except Exception as e:
+                logger.warning(f"Failed to clear index: {e}")
             # Пересобираем
             self._maybe_build_index_from_docx()
             self.engine.load()
@@ -87,18 +86,31 @@ class QAPipeline:
 
     def _maybe_build_index_from_docx(self) -> None:
         docx_path = os.getenv("DOCX_PATH", str(Path("src/data/input.docx").resolve()))
-        if not Path(docx_path).exists():
+        p = Path(docx_path)
+        if not p.exists():
             logger.warning(f"DOCX file not found: {docx_path}")
             return
         try:
-            logger.info("Building index from DOCX: %s", docx_path)
-            from src.utils.file_loader import parse_docx_to_text
-            text = parse_docx_to_text(docx_path)
-            if not text:
-                logger.warning("Parsed DOCX is empty")
+            logger.info("Building index from DOCX via LangChain loader: %s", docx_path)
+            from langchain_community.document_loaders import Docx2txtLoader
+            from langchain_text_splitters import RecursiveCharacterTextSplitter
+            from transformers import AutoTokenizer
+
+            # Загружаем документ
+            loader = Docx2txtLoader(str(p))
+            docs = loader.load()
+            if not docs:
+                logger.warning("DOCX loader returned no documents")
                 return
+
+            # Склеиваем странички в один текст и передаём в engine.build_from_text
+            text = "\n\n".join(d.page_content for d in docs if d and d.page_content)
+            if not text.strip():
+                logger.warning("Loaded DOCX text is empty after join")
+                return
+
             self.engine.build_from_text(text)
-            logger.info("Index built from DOCX → index_path=%s, chunks_path=%s", self.engine.index_path, self.engine.meta_path)
+            logger.info("Index built from DOCX using LangChain loader")
         except Exception as e:
             logger.error(f"Failed to build index from DOCX: {e}")
 
@@ -125,8 +137,8 @@ class QAPipeline:
                 query=query,
                 chunks=contexts,
                 topk=topk,
-                vllm_url=os.getenv("VLLM_URL", "http://localhost:8000"),
-                model=os.getenv("VLLM_MODEL", "Qwen/Qwen3-4B-Thinking-2507"),
+                vllm_url=os.getenv("VLLM_URL"),
+                model=os.getenv("VLLM_MODEL"),
             )
             logger.info("LLM reranking done in %.3fs", time.monotonic() - t1)
             logger.info(f"After LLM reranking: {len(contexts)} contexts, first scores: {[c.get('llm_score', 0) for c in contexts[:3]]}")
@@ -137,8 +149,8 @@ class QAPipeline:
         answer = await generate_answer(
             query=query,
             contexts=contexts,
-            ollama_url=os.getenv("OLLAMA_URL", "http://localhost:11434"),
-            model=os.getenv("OLLAMA_MODEL", "gpt-oss:20b"),
+            ollama_url=os.getenv("OLLAMA_URL"),
+            model=os.getenv("OLLAMA_MODEL"),
         )
         logger.info("LLM answer generated in %.3fs", time.monotonic() - t2)
         

@@ -1,4 +1,6 @@
+from typing import List, Optional
 from pydantic import BaseModel
+
 
 class BuildConfig(BaseModel):
 	batch_size: int
@@ -15,3 +17,11 @@ class MetricConfig(BaseModel):
 	sas_device: str 
 	sas_fp16: bool
 	bleurt_endpoint: str 
+
+class ScoreRequest(BaseModel):
+    references: List[str]
+    candidates: List[str]
+
+class ChatRequest(BaseModel):
+	query: str
+	use_llm_rerank: Optional[bool] = None

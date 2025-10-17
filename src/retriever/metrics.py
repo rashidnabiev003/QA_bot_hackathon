@@ -3,8 +3,8 @@ import urllib.request
 import json, re, os, logging
 from typing import Optional, List, Dict, Any
 import numpy as np
-from FlagEmbedding import BGEM3FlagModel
 from nltk.stem.snowball import RussianStemmer
+from sentence_transformers import SentenceTransformer 
 from src.schemas.pydantic_schemas import MetricConfig
 
 bleurt_score = None
@@ -59,7 +59,11 @@ class MetricComputer:
         self.cfg = cfg
         self.bleurt_url = cfg.bleurt_endpoint or os.getenv("BLEURT_URL")
         self.bleurt = None
-        self.sas = BGEM3FlagModel(cfg.sas_model, device=cfg.sas_device, use_fp16=cfg.sas_fp16)
+        # Принудительно сажаем SAS-модель на CPU, если не хотим отбирать GPU у vLLM
+        device = os.getenv("SAS_DEVICE", cfg.sas_device)
+        force_cpu = os.getenv("SAS_FORCE_CPU", "1") in ("1", "true", "True")
+        target_device = "cpu" if force_cpu else device
+        self.sas = SentenceTransformer(cfg.sas_model, device=target_device)
 
     def _bleurt20_http(self, pred: str, ref: str) -> float:
         try:

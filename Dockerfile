@@ -1,8 +1,7 @@
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-	PYTHONUNBUFFERED=1 \
-	PIP_NO_CACHE_DIR=1
+	PYTHONUNBUFFERED=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
 	build-essential \
@@ -12,30 +11,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+	ln -s /root/.local/bin/uv /usr/local/bin/uv
+
 COPY pyproject.toml ./
-
-RUN pip install --upgrade pip setuptools wheel && \
-	pip install \
-	"numpy>=2.0.0" \
-	"pydantic==2.11.10" \
-	"sentence-transformers>=5.0.0" \
-	"transformers>=4.53.1" \
-	"torch==2.7.0" \
-	"torchaudio>=2.7.0" \
-	"torchvision>=0.22.0" \
-	"nltk>=3.8.0" \
-	"aiohttp>=3.9.0" \
-	"faiss-cpu>=1.8.0" \
-	"FlagEmbedding>=1.2.0" \
-	"fastapi>=0.115.0" \
-	"uvicorn>=0.30.0" \
-	"python-dotenv>=1.0.0"
-
+COPY uv.lock ./
+COPY .env ./.env
 COPY src ./src
 COPY README.md ./
+RUN uv sync --index-strategy unsafe-best-match -U
 
-RUN python -c "import nltk; nltk.download('punkt')"
+RUN . .venv/bin/activate && python -c "import nltk; nltk.download('punkt')"
 
 EXPOSE 8000
 
-CMD ["uvicorn", "src.app.server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "src.app.server:app", "--host", "0.0.0.0", "--port", "8000"]

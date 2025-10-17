@@ -14,6 +14,10 @@ BLEURT_CKPT = os.getenv("BLEURT_CHECKPOINT", "BLEURT-20")
 app = FastAPI()
 scorer = None
 
+class ScoreRequest(BaseModel):
+    references: List[str]
+    candidates: List[str]
+
 @app.on_event("startup")
 def _load_model():
     global scorer
@@ -23,10 +27,6 @@ def _load_model():
         scorer = bleurt_score.BleurtScorer(BLEURT_CKPT)
     except Exception:
         scorer = None
-
-class ScoreRequest(BaseModel):
-    references: List[str]
-    candidates: List[str]
 
 @app.get("/health")
 def healthz():

@@ -81,11 +81,14 @@ async def generate_answer(
 	}
 
 	try:
-		async with aiohttp.ClientSession() as session, session.post(
-			f'{ollama_url}/api/chat',
-			json=payload,
-			timeout=aiohttp.ClientTimeout(total=300),
-		) as resp:
+		async with (
+			aiohttp.ClientSession() as session,
+			session.post(
+				f'{ollama_url}/api/chat',
+				json=payload,
+				timeout=aiohttp.ClientTimeout(total=300),
+			) as resp,
+		):
 			if resp.status != 200:
 				error_text = await resp.text()
 				logger.error(f'Ollama error: {resp.status} - {error_text}')

@@ -72,3 +72,4 @@ class TestBenchmarkRequest:
         assert req.path == "/path/to/file.xlsx"
         assert req.limit == 100
 
+

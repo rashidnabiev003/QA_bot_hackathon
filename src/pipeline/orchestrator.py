@@ -25,7 +25,7 @@ class QAPipeline:
         self.build_config = BuildConfig(
             batch_size=16,
             force_cpu=False,
-            rerank_device=os.getenv("RERANK_DEVICE"),
+            rerank_device=os.getenv("RERANK_DEVICE", "cpu"),
             use_fp16_rerank=True,
             chunk_size=128,
             overlap_size=50,

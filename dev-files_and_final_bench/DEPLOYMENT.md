@@ -214,3 +214,4 @@ docker compose logs -f bleurt
 ```bash
 docker stats qa_bot_app qa_bot_vllm qa_bot_ollama bleurt20
 ```
+

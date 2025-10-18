@@ -128,3 +128,4 @@ class TestBenchmark:
             
             assert result.get("ok") is True or "error" in result
 
+

@@ -8,7 +8,7 @@
 
 ## Важное
 
-Собранный бенчмар находится в папке `dev-files_and_final_bench/final_version(no_llm_rerank).xlsx`
+Собранный бенчмарr и мини демонстрация находится в папке `dev-files_and_final_bench`
 
 ## Архитектура
 
@@ -70,34 +70,6 @@ QA_bot_hackathon/
 └── pyproject.toml
 ```
 
-## API Endpoints
-
-**GET /**
-Web интерфейс для взаимодействия с системой
-
-**POST /chat**
-```json
-{
-  "query": "вопрос пользователя",
-  "use_llm_rerank": false
-}
-```
-
-**POST /benchmark**
-```json
-{
-  "path": "path/to/triplets.xlsx",
-  "limit": 10,
-  "use_llm_rerank": false
-}
-```
-
-**POST /rebuild_index**
-Пересборка индекса из input.docx
-
-**GET /health**
-Статус сервиса
-
 ## Технологический стек
 
 **Backend**
@@ -125,35 +97,43 @@ Web интерфейс для взаимодействия с системой
 **Метрики для ретривера**
 - mrr@k (кастомная реализация)
 - ndcg@k (кастомная реализация)
-- map@k (кастомная реализация)
+- map@100 (кастомная реализация)
 
 ## Конфигурация
 
 Основные параметры задаются через переменные окружения:
 
 ```bash
-INDEX_DIR=src/data
-DOCX_PATH=src/data/input.docx
+HUGGING_FACE_HUB_TOKEN=YOUR_TOKEN
 
-EMBEDDING_MODEL=BAAI/bge-m3
-RERANK_MODEL=BAAI/bge-reranker-v2-m3
-SAS_MODEL=BAAI/bge-reranker-v2-m3
-
-OLLAMA_URL=http://ollama:11434
-OLLAMA_MODEL=gpt-oss:20b
-
-VLLM_URL=http://vllm:8000
 VLLM_MODEL=Qwen/Qwen3-4B-Thinking-2507
+OLLAMA_MODEL=gpt-oss:20b
+SAS_MODEL=BAAI/bge-reranker-v2-m3
+RERANK_MODEL=BAAI/bge-reranker-v2-m3
+EMBEDDING_MODEL=deepvk/USER-bge-m3
 
-BLEURT_URL=http://bleurt:8080
-BLEURT_CHECKPOINT=/models/BLEURT-20
+VLLM_URL=http://localhost:8000
+OLLAMA_URL=http://localhost:11434
 
+
+CHUNK_SIZE=400
+CHUNK_OVERLAP=100
 TOPN=50
-TOPK=5
-USE_LLM_RERANK=0
+TOPK=10
 
-CHUNK_SIZE=128
-CHUNK_OVERLAP=50
+
+RERANK_DEVICE=cuda
+SAS_DEVICE=cuda
+
+INDEX_DIR=data
+DATA_DOCX=data/input.docx
+
+BLEURT_CHECKPOINT=/models/BLEURT-20
+BLEURT_URL=http://localhost:8080    
+
+FORCE_REBUILD_INDEX=0
+AUTO_BUILD_INDEX=0
+USE_LLM_RERANK=0
 ```
 
 ## Запуск
@@ -164,21 +144,12 @@ CHUNK_OVERLAP=50
 make up
 ```
 
-### Локально
-
+### Логи
 ```bash
-uv sync
-uv run uvicorn src.app.server:app --host 0.0.0.0 --port 8000
+make logs
 ```
 
 Подробная инструкция по развертыванию: `dev-files_and_final_bench/DEPLOYMENT.md`
-
-## Тестирование
-
-```bash
-uv run pytest tests/ -v
-uv run pytest tests/ --cov=src --cov-report=html
-```
 
 ## CI/CD
 

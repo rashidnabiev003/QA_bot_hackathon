@@ -31,7 +31,7 @@ dependencies = [
     "docx2txt",
     "dotenv",
     "openpyxl",
-    "FlagEmbedding==1.2.10"
+    "FlagEmbedding==1.2.10",
 ]
 
 [dependency-groups]

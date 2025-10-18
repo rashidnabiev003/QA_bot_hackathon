@@ -161,10 +161,10 @@ class SemanticSearch:
             if not isinstance(score_rerank, list):
                 score_rerank = [float(score_rerank)] * len(docs)
         except Exception as e:
-            self.logger.warning("FlagReranker failed: %s", e)
+            logger.warning("FlagReranker failed: %s", e)
             score_rerank = [0.0] * len(docs)
 
-        self.logger.info({'event': 'ce_scores_head', 'scores': score_rerank[:5]})
+        logger.info({'event': 'ce_scores_head', 'scores': score_rerank[:5]})
 
         if score_rerank and len(score_rerank) == len(docs):
             order = np.argsort(-np.asarray(score_rerank))

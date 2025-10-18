@@ -84,7 +84,7 @@ HTML = """
           rebuildBtn.disabled = false; rebuildBtn.textContent = old;
         }
       });
-      
+
       const benchWrap = document.createElement('div');
       benchWrap.style.marginTop = '8px';
       benchWrap.innerHTML = `
@@ -116,5 +116,6 @@ HTML = """
 </html>
 """
 
+
 def get_html():
-    return HTML
+	return HTML

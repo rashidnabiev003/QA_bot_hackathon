@@ -1,32 +1,35 @@
-from typing import List, Optional
 from pydantic import BaseModel
 
 
 class BuildConfig(BaseModel):
 	batch_size: int
-	force_cpu: bool               
-	rerank_device: str 
+	force_cpu: bool
+	rerank_device: str
 	use_fp16_rerank: bool = True
 	chunk_size: int
 	overlap_size: int
 	enable_rerank: bool = True
 
+
 class MetricConfig(BaseModel):
-	bleurt_ckpt: str 
-	sas_model: str 
-	sas_device: str 
+	bleurt_ckpt: str
+	sas_model: str
+	sas_device: str
 	sas_fp16: bool
-	bleurt_endpoint: str 
+	bleurt_endpoint: str
+
 
 class ScoreRequest(BaseModel):
-    references: List[str]
-    candidates: List[str]
+	references: list[str]
+	candidates: list[str]
+
 
 class ChatRequest(BaseModel):
 	query: str
-	use_llm_rerank: Optional[bool] = None
+	use_llm_rerank: bool | None = None
+
 
 class BenchmarkRequest(BaseModel):
-	path: Optional[str] = None  
-	limit: Optional[int] = None  
-	use_llm_rerank: Optional[bool] = None  
+	path: str | None = None
+	limit: int | None = None
+	use_llm_rerank: bool | None = None

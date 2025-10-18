@@ -31,11 +31,11 @@ class QAPipeline:
             overlap_size=50,
         )
         self.metric_config = MetricConfig(
-            bleurt_ckpt=os.getenv("BLEURT_CHECKPOINT"),
+            bleurt_ckpt=os.getenv("BLEURT_CHECKPOINT", "BLEURT-20"),
             sas_model=os.getenv("SAS_MODEL", "BAAI/bge-reranker-v2-m3"),
             sas_device=os.getenv("SAS_DEVICE", "cpu"),
             sas_fp16=False,
-            bleurt_endpoint=os.getenv("BLEURT_URL"),
+            bleurt_endpoint=os.getenv("BLEURT_URL", "http://localhost:8080"),
         )
         self.engine = SemanticSearch(self.index_dir, self.build_config)
         self._index_checked = False

@@ -1,6 +1,6 @@
 [project]
 name = "QA_bot_hackathon"
-version = "2.1.2"
+version = "2.2.0"
 description = "QA chat-bot for hackathon"
 authors = [
     { name = "Набиев Рашидхон", email = "nabievrasheed@yandex.ru"},

@@ -27,8 +27,6 @@ def _read_prompt() -> Tuple[str, str]:
 	return system_prompt, user_prompt
 
 def _extract_json_from_text(text: str) -> str:
-	"""Извлекает JSON из текста, удаляя markdown блоки и лишний текст"""
-	
 	json_block = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
 	if json_block:
 		return json_block.group(1)
@@ -40,7 +38,6 @@ def _extract_json_from_text(text: str) -> str:
 	return text
 
 def _normalize_json_string(text: str) -> str:
-	"""Пытается получить валидный JSON-объект в виде строки"""
 	try:
 		candidate = _extract_json_from_text(text)
 		obj = json.loads(candidate)

@@ -25,3 +25,8 @@ class ScoreRequest(BaseModel):
 class ChatRequest(BaseModel):
 	query: str
 	use_llm_rerank: Optional[bool] = None
+
+class BenchmarkRequest(BaseModel):
+	path: Optional[str] = None  
+	limit: Optional[int] = None  
+	use_llm_rerank: Optional[bool] = None  

@@ -31,10 +31,15 @@ HTML = """
       const ctxDiv = document.getElementById('ctx');
       ctxDiv.innerHTML = '';
       (data.contexts || []).forEach((c, i) => {
-        const sc = (c.llm_score ?? c.score ?? 0).toFixed(3);
-        const bleurt = (c.bleurt ?? 0).toFixed(3);
-        const sas = (c.sas ?? 0).toFixed(3);
-        ctxDiv.innerHTML += `<div style="margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;"><b>[${i+1}]</b> <span style="color: #666;">score: ${sc} | BLEURT: ${bleurt} | SAS: ${sas}</span><br/><div style="margin-top: 5px;">${c.text}</div></div>`;
+        let scoreInfo = '';
+        if (c.llm_score !== undefined) {
+          scoreInfo = `<span style="color: #666;">LLM score: ${c.llm_score.toFixed(3)}</span><br/>`;
+        } else if (c.score_rerank !== undefined) {
+          scoreInfo = `<span style="color: #666;">rerank score: ${c.score_rerank.toFixed(3)}</span><br/>`;
+        } else if (c.score !== undefined) {
+          scoreInfo = `<span style="color: #666;">score: ${c.score.toFixed(3)}</span><br/>`;
+        }
+        ctxDiv.innerHTML += `<div style="margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;"><b>[${i+1}]</b> ${scoreInfo}<div style="margin-top: 5px;">${c.text}</div></div>`;
       });
       const m = data.metrics || {};
       const metrics = document.getElementById('metrics');
@@ -43,6 +48,23 @@ HTML = """
         const val = typeof m[k] === 'number' ? m[k].toFixed(3) : m[k];
         metrics.innerHTML += `<div><b>${k}:</b> ${val}</div>`;
       });
+    }
+    async function runBenchmark() {
+      const useLLM = document.getElementById('llm_bench').checked;
+      const limitVal = document.getElementById('limit').value.trim();
+      const payload = { use_llm_rerank: useLLM };
+      if (limitVal) { payload.limit = parseInt(limitVal, 10); }
+      const btn = document.getElementById('bench');
+      const old = btn.textContent; btn.textContent = 'Запуск...'; btn.disabled = true;
+      try {
+        const res = await fetch('/benchmark', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        alert(data.ok ? ('Сохранено: ' + data.path + ' (' + data.rows + ' строк)') : ('Ошибка: ' + data.error));
+      } catch(e) {
+        alert('Ошибка запуска бенчмарка: ' + e);
+      } finally {
+        btn.textContent = old; btn.disabled = false;
+      }
     }
     window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('send').addEventListener('click', sendQuery);
@@ -62,6 +84,16 @@ HTML = """
           rebuildBtn.disabled = false; rebuildBtn.textContent = old;
         }
       });
+      
+      const benchWrap = document.createElement('div');
+      benchWrap.style.marginTop = '8px';
+      benchWrap.innerHTML = `
+        <label><input type=\"checkbox\" id=\"llm_bench\"/> LLM-реранкинг (бенчмарк)</label>
+        <input id=\"limit\" placeholder=\"limit\" style=\"width:80px; margin-left:6px;\"/>
+        <button id=\"bench\" class=\"send\" style=\"background:#0d6efd\">Бенчмарк XLSX</button>
+      `;
+      document.querySelector('.input').appendChild(benchWrap);
+      document.getElementById('bench').addEventListener('click', runBenchmark);
     });
   </script>
 </head>

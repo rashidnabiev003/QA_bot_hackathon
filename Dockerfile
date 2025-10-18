@@ -17,9 +17,9 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
 COPY pyproject.toml ./
 COPY uv.lock ./
 COPY .env ./.env
-COPY src ./src
 COPY README.md ./
-RUN uv sync --index-strategy unsafe-best-match -U
+RUN uv sync --no-install-project --no-dev --frozen
+COPY src ./src
 
 RUN . .venv/bin/activate && python -c "import nltk; nltk.download('punkt')"
 

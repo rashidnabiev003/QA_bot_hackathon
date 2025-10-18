@@ -4,13 +4,12 @@ import logging
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from src.pipeline.orchestrator import get_pipeline
-from src.schemas.pydantic_schemas import ChatRequest
+from src.schemas.pydantic_schemas import ChatRequest, BenchmarkRequest
 from src.app.static.index import get_html
 from dotenv import load_dotenv
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
-# Ограничим видимые GPU для приложения (оставляем GPU 1 под vLLM, а приложению — 0)
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", os.getenv("CUDA_VISIBLE_DEVICES", "0"))
 logger = logging.getLogger(__name__)
 
@@ -32,8 +31,8 @@ async def chat(req: ChatRequest):
 	pipe = _get_pipeline()
 	res = await pipe.answer(
 		query=req.query,
-		topn=int(os.getenv("TOPN")),
-		topk=int(os.getenv("TOPK")),
+        topn=int(os.getenv("TOPN", "50")),
+        topk=int(os.getenv("TOPK", "5")),
 		use_llm_rerank=req.use_llm_rerank,
 	)
 	return res
@@ -51,4 +50,16 @@ async def rebuild_index():
 @app.get("/", response_class=HTMLResponse)
 def index():
 	return get_html()
+
+@app.post("/benchmark")
+async def benchmark(req: BenchmarkRequest):
+	pipe = _get_pipeline()
+	res = await pipe.benchmark_from_xlsx(
+		path=req.path,
+		limit=req.limit,
+		use_llm_rerank=req.use_llm_rerank,
+		topn=int(os.getenv("TOPN", "50")),
+		topk=int(os.getenv("TOPK", "5")),
+	)
+	return res
 

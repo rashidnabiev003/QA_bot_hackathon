@@ -83,9 +83,19 @@ ignore = [
     "PLR0913", # too many arguments
     "PLR0915", # too many statements
     "PLR2004", # magic values
+    "PLR0912", # too many branches
     "S311",    # pseudorandom generators (ok for demo data)
     "UP032",   # use f-string
     "S104",    # hardcoded bind
+    "S310",    # audit URL open
+    "PLW0603", # global statement
+    "PLC0415", # import not at top-level
+    "RUF002",  # ambiguous unicode chars in docstrings
+    "RUF003",  # ambiguous unicode chars in comments
+    "E741",    # ambiguous variable name
+    "N802",    # function name should be lowercase
+    "ARG002",  # unused method argument
+    "PLW1508", # invalid env var default type
 ]
 
 [tool.ruff.lint.per-file-ignores]

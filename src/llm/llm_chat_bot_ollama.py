@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def _read_prompt() -> tuple[str, str]:
 	"""Кэшированное чтение промптов из файлов"""
 	base = os.path.join(
-		os.path.dirname(__file__), '..', 'prompts', f'llm_response'
+		os.path.dirname(__file__), '..', 'prompts', 'llm_response'
 	)
 	system_path = os.path.abspath(os.path.join(base, 'system.txt'))
 	user_path = os.path.abspath(os.path.join(base, 'user.txt'))
@@ -81,28 +81,27 @@ async def generate_answer(
 	}
 
 	try:
-		async with aiohttp.ClientSession() as session:
-			async with session.post(
-				f'{ollama_url}/api/chat',
-				json=payload,
-				timeout=aiohttp.ClientTimeout(total=300),
-			) as resp:
-				if resp.status != 200:
-					error_text = await resp.text()
-					logger.error(f'Ollama error: {resp.status} - {error_text}')
-					return {
-						'answer': 'Ошибка при генерации ответа',
-						'confidence': 'low',
-						'sources_used': [],
-					}
+		async with aiohttp.ClientSession() as session, session.post(
+			f'{ollama_url}/api/chat',
+			json=payload,
+			timeout=aiohttp.ClientTimeout(total=300),
+		) as resp:
+			if resp.status != 200:
+				error_text = await resp.text()
+				logger.error(f'Ollama error: {resp.status} - {error_text}')
+				return {
+					'answer': 'Ошибка при генерации ответа',
+					'confidence': 'low',
+					'sources_used': [],
+				}
 
-				result = await resp.json()
-				response_text = result.get('message', {}).get('content', '{}')
-				normalized = _normalize_json_string(response_text)
-				response_data = json.loads(normalized)
+			result = await resp.json()
+			response_text = result.get('message', {}).get('content', '{}')
+			normalized = _normalize_json_string(response_text)
+			response_data = json.loads(normalized)
 
-				logger.info(f'Generated answer for query: {query[:50]}...')
-				return response_data
+			logger.info(f'Generated answer for query: {query[:50]}...')
+			return response_data
 
 	except Exception as e:
 		logger.error(f'Error calling Ollama: {e}', exc_info=True)

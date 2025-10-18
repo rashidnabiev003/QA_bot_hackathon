@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class QAPipeline:
-	def __init__(self, index_dir: str = None):
+	def __init__(self, index_dir: str | None = None):
 		if index_dir is None:
 			index_dir = os.getenv('INDEX_DIR')
 		self.index_dir = index_dir

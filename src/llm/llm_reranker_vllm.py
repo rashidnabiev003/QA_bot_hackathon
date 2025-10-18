@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def _read_prompt() -> tuple[str, str]:
 	"""Кэшированное чтение промптов из файлов"""
 	base = os.path.join(
-		os.path.dirname(__file__), '..', 'prompts', f'llm_reranking'
+		os.path.dirname(__file__), '..', 'prompts', 'llm_reranking'
 	)
 	system_path = os.path.abspath(os.path.join(base, 'system.txt'))
 	user_path = os.path.abspath(os.path.join(base, 'user.txt'))
@@ -108,11 +108,8 @@ async def _score_one(
 				return 0.0
 			if s > 1.0:
 				s = s / 10.0
-			if s < 0.0:
-				s = 0.0
-			if s > 1.0:
-				s = 1.0
-			return s
+			s = max(s, 0.0)
+			return min(s, 1.0)
 	except Exception as e:
 		logger.warning(f'Error scoring chunk: {e}')
 		return 0.0
